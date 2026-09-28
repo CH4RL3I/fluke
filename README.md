@@ -24,7 +24,7 @@ DSR never exceeds 0.95.
 ## Install and quickstart
 
 ```bash
-uv add git+https://github.com/emiliogappa/backtest-overfitting   # or: pip install -e .
+uv add git+https://github.com/CH4RL3I/backtest-overfitting   # or: pip install -e .
 ```
 
 ```python
