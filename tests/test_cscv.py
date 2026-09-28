@@ -7,8 +7,9 @@ from overfit import cscv_pbo, sharpe_ratio
 
 
 def test_noise_pbo_is_high():
-    pbos = [cscv_pbo(noise_matrix(seed), 16).pbo for seed in range(5)]
-    assert np.mean(pbos) > 0.4  # theory: ~0.5 for iid noise (and above with autocorrelation)
+    pbos = [cscv_pbo(noise_matrix(seed), 16).pbo for seed in range(12)]
+    # iid noise: PBO ~ 0.5 on average (40-seed check: 0.50), but noisy for a single draw
+    assert 0.4 < np.mean(pbos) < 0.65
     assert all(p > 0.15 for p in pbos)
 
 
