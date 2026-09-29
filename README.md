@@ -1,5 +1,7 @@
 # overfit
 
+[![CI](https://github.com/CH4RL3I/backtest-overfitting/actions/workflows/ci.yml/badge.svg)](https://github.com/CH4RL3I/backtest-overfitting/actions/workflows/ci.yml) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![License: MIT](https://img.shields.io/badge/license-MIT-green)
+
 **Is your best backtest real, or just the luckiest of N tries?**
 
 A small Python library that answers that question with the methods of Marcos López de Prado:
