@@ -1,6 +1,6 @@
-# overfit
+# fluke: is your best backtest real?
 
-[![CI](https://github.com/CH4RL3I/backtest-overfitting/actions/workflows/ci.yml/badge.svg)](https://github.com/CH4RL3I/backtest-overfitting/actions/workflows/ci.yml) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![License: MIT](https://img.shields.io/badge/license-MIT-green)
+[![CI](https://github.com/CH4RL3I/fluke/actions/workflows/ci.yml/badge.svg)](https://github.com/CH4RL3I/fluke/actions/workflows/ci.yml) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
 **Is your best backtest real, or just the luckiest of N tries?**
 
@@ -26,7 +26,7 @@ DSR never exceeds 0.95.
 ## Install and quickstart
 
 ```bash
-uv add git+https://github.com/CH4RL3I/backtest-overfitting   # or: pip install -e .
+uv add git+https://github.com/CH4RL3I/fluke   # or: pip install -e .
 ```
 
 ```python
