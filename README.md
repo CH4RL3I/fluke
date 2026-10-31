@@ -71,6 +71,37 @@ selection from noise gives about 0.5. The result also carries the full $\lambda$
 the regression of the winner's OOS Sharpe on its IS Sharpe (performance degradation) and
 $\Pr[\text{OOS Sharpe} < 0]$ (probability of loss).
 
+All combinations are evaluated exactly in lexicographic batches, rather than allocating all
+split-by-strategy matrices together. `cscv_pbo(returns, n_blocks=16, batch_size=64)` controls
+the positive integer batch size (default 64); smaller batches use less temporary memory.
+It changes neither the split set nor the treatment of ties: the first IS-best column wins,
+and tied OOS Sharpes receive their average rank. The `max_combinations` safety cap still
+applies to the full number of combinations, not one batch.
+
+For $M=\binom{S}{S/2}$ splits and batch size $B$, temporary split storage is
+$O(BSN)$ instead of $O(MSN)$. Input/centred-return storage remains $O(TN)$, block summaries
+use $O(SN)$, and the three returned per-split vectors use $O(M)$. Batching bounds the large
+temporary arrays; it does not remove the combinatorial running time or make arbitrarily
+large input matrices fit in memory.
+
+### Reproduce time and memory measurements
+
+Run each configuration in a fresh process. This opt-in benchmark generates a seeded noise
+matrix, runs only CSCV and prints JSON without downloading data or calling a model:
+
+```bash
+uv run python examples/benchmark_cscv.py --observations 512 --strategies 15000 --blocks 16 --batch-size 64 --seed 0
+```
+
+The record includes parameters, platform/CPU and Python/NumPy/SciPy versions, input bytes,
+CSCV elapsed seconds and whole-process peak resident memory. Peak memory includes imports
+and input generation; elapsed time covers only `cscv_pbo`. `resource.ru_maxrss` is normalized
+from bytes on macOS and KiB on Linux; unsupported platforms report `null` rather than an
+assumed unit. Compare like machines, versions and input parameters, and account for other
+load when comparing runtime. This is a computational benchmark on synthetic returns, not
+evidence of predictive value or a rerun of the historical demo above. Small independent
+reference tests check numerical equivalence without allocating a full-size unbatched run.
+
 ### Probabilistic and Deflated Sharpe Ratio
 
 Bailey and López de Prado (2014). With $\hat\gamma_3$ the skewness and $\hat\gamma_4$ the
@@ -98,7 +129,7 @@ in periods, and infinite when $\widehat{SR}\le SR^*$.
 
 ## Validation
 
-`uv run pytest` runs 30 tests, including: PSR, MinTRL and $SR_0$ against hand-computed values;
+`uv run pytest` checks PSR, MinTRL and $SR_0$ against hand-computed values;
 100 noise configurations (mean PBO about 0.5, DSR not significant); a matrix with one drifting
 configuration (PBO near 0, DSR significant); the sign convention of $\lambda$; and edge cases
 (odd $S$, $N=1$, constant returns, NaNs, too-short input).

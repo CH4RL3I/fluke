@@ -17,8 +17,9 @@ Procedure (Section 2 of the paper):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from itertools import combinations
+from itertools import combinations, islice
 from math import comb
+from numbers import Integral
 
 import numpy as np
 from scipy import stats
@@ -62,7 +63,9 @@ def _sharpe_from_sums(s1, s2, n, mean_shift, scale):
     return sr
 
 
-def cscv_pbo(returns, n_blocks: int = 16, max_combinations: int = 500_000) -> PBOResult:
+def cscv_pbo(
+    returns, n_blocks: int = 16, max_combinations: int = 500_000, *, batch_size: int = 64
+) -> PBOResult:
     """Run CSCV on a T x N matrix of per-period returns and compute the PBO.
 
     Parameters
@@ -74,7 +77,13 @@ def cscv_pbo(returns, n_blocks: int = 16, max_combinations: int = 500_000) -> PB
         (S=16 gives 12,870). If T is not divisible by S, the *oldest* T mod S rows are dropped.
     max_combinations : int
         Safety cap on C(S, S/2); S=32 alone would be ~6e8.
+    batch_size : int, keyword-only
+        Positive number of combinations processed together (default 64). This bounds the
+        temporary split-by-strategy arrays; it does not sample or change the combinations.
+        The three returned per-combination vectors are still retained in full.
     """
+    if isinstance(batch_size, bool) or not isinstance(batch_size, Integral) or batch_size < 1:
+        raise ValueError("batch_size must be a positive integer")
     x = np.asarray(returns, dtype=float)
     if x.ndim != 2:
         raise ValueError("returns must be a 2-D (T x N) matrix")
@@ -86,7 +95,8 @@ def cscv_pbo(returns, n_blocks: int = 16, max_combinations: int = 500_000) -> PB
         raise ValueError("need at least 2 strategies: with N=1 there is no selection to overfit")
     if np.isnan(x).any() or np.isinf(x).any():
         raise ValueError("returns must be finite (no NaN/inf)")
-    if comb(s, s // 2) > max_combinations:
+    n_combinations = comb(s, s // 2)
+    if n_combinations > max_combinations:
         raise ValueError(f"C({s},{s // 2}) exceeds max_combinations={max_combinations}")
     m = t // s  # rows per block
     if m < 2:
@@ -101,21 +111,28 @@ def cscv_pbo(returns, n_blocks: int = 16, max_combinations: int = 500_000) -> PB
     b2 = (blocks**2).sum(axis=1)
     tot1, tot2 = b1.sum(axis=0), b2.sum(axis=0)
 
-    combos = np.array(list(combinations(range(s), s // 2)))  # M x S/2
     n_is = m * (s // 2)
-    is1, is2 = b1[combos].sum(axis=1), b2[combos].sum(axis=1)  # M x N
-    sr_is = _sharpe_from_sums(is1, is2, n_is, shift, scale)
-    sr_oos = _sharpe_from_sums(tot1 - is1, tot2 - is2, n_is, shift, scale)
+    logits = np.empty(n_combinations)
+    is_best = np.empty(n_combinations)
+    oos_best = np.empty(n_combinations)
+    combination_iter = combinations(range(s), s // 2)
+    for start in range(0, n_combinations, batch_size):
+        combos = np.asarray(list(islice(combination_iter, batch_size)), dtype=np.intp)
+        stop = start + len(combos)
+        # Only this batch's split-by-strategy matrices exist at once. In particular, do
+        # not materialize all C(S,S/2) advanced-indexed block tensors before batching.
+        is1, is2 = b1[combos].sum(axis=1), b2[combos].sum(axis=1)
+        sr_is = _sharpe_from_sums(is1, is2, n_is, shift, scale)
+        sr_oos = _sharpe_from_sums(tot1 - is1, tot2 - is2, n_is, shift, scale)
 
-    best = sr_is.argmax(axis=1)  # ties -> first column
-    rows = np.arange(combos.shape[0])
-    # relative OOS rank of the IS winner; average rank so ties (e.g. flat strategies) sit mid-way
-    ranks = stats.rankdata(sr_oos, axis=1, method="average")[rows, best]
-    omega = ranks / (n + 1)
-    logits = np.log(omega / (1.0 - omega))
-
-    is_best = sr_is[rows, best]
-    oos_best = sr_oos[rows, best]
+        best = sr_is.argmax(axis=1)  # ties -> first column
+        rows = np.arange(len(combos))
+        # Average OOS ranks preserve tied/flat strategies' original semantics.
+        ranks = stats.rankdata(sr_oos, axis=1, method="average")[rows, best]
+        omega = ranks / (n + 1)
+        logits[start:stop] = np.log(omega / (1.0 - omega))
+        is_best[start:stop] = sr_is[rows, best]
+        oos_best[start:stop] = sr_oos[rows, best]
     if np.ptp(is_best) > 0:
         fit = stats.linregress(is_best, oos_best)
         slope, intercept, r2 = float(fit.slope), float(fit.intercept), float(fit.rvalue**2)
